@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classement des clubs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f4f2ed;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 900px;
+    box-shadow: 0 2px 24px rgba(0,0,0,0.07);
+  }
+  .header { margin-bottom: 1.5rem; }
+  .header h1 { font-size: 20px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.3px; }
+  .header p { font-size: 13px; color: #888; margin-top: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem; }
+  .legend-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px; border: 1.5px solid;
+    background: transparent; font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: opacity .2s;
+  }
+  .legend-btn .dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .legend-btn.inactive { opacity: 0.35; }
+
+  .main-layout {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  /* Rank overlay positioned absolutely over the canvas */
+  #rankOverlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 36px;
+    pointer-events: none;
+  }
+  .rank-item {
+    position: absolute;
+    width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #aaa;
+  }
+  .rank-item.top3 { color: #E07B20; }
+  .rank-item.highlight-rank { color: #D4537E; }
+
+  .chart-wrap { position: relative; flex: 1; margin-left: 36px; }
+  .note { font-size: 11px; color: #999; margin-top: 1rem; text-align: right; }
+  .note span { color: #E24B4A; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <h1>Classement des clubs</h1>
+    <p>Cliquez sur une cat&eacute;gorie pour l&#39;activer / d&eacute;sactiver &mdash; le classement se recalcule automatiquement</p>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="main-layout" id="mainLayout">
+    <div id="rankOverlay"></div>
+    <div class="chart-wrap" id="chart-wrap">
+      <canvas id="myChart"></canvas>
+    </div>
+  </div>
+  <p class="note">&#9733; Escalquens &nbsp;|&nbsp; <span>* P&eacute;nalit&eacute; -40 pts pour Lavaur</span></p>
+</div>
+
+<script>
+var allData = [
+  { club: 'TFC',         penalite: 0,   matchs: 276, conduite: 30, jonglage: 50, regles: 46, vie: 46 },
+  { club: 'Agde',        penalite: 0,   matchs: 228, conduite: 56, jonglage: 38, regles: 49, vie: 44 },
+  { club: 'Montpellier', penalite: 0,   matchs: 180, conduite: 60, jonglage: 39, regles: 42, vie: 51 },
+  { club: 'Montauban',   penalite: 0,   matchs: 144, conduite: 55, jonglage: 45, regles: 45, vie: 44 },
+  { club: 'JET',         penalite: 0,   matchs: 180, conduite: 30, jonglage: 5,  regles: 42, vie: 48 },
+  { club: 'Carcassonne', penalite: 0,   matchs: 132, conduite: 21, jonglage: 60, regles: 45, vie: 41 },
+  { club: 'Escalquens',  penalite: 0,   matchs: 168, conduite: 31, jonglage: 13, regles: 41, vie: 44 },
+  { club: 'Narbonne',    penalite: 0,   matchs: 132, conduite: 37, jonglage: 16, regles: 45, vie: 37 },
+  { club: 'Aucamville',  penalite: 0,   matchs: 144, conduite: 15, jonglage: 25, regles: 43, vie: 38 },
+  { club: 'Rodez',       penalite: 0,   matchs: 120, conduite: 19, jonglage: 14, regles: 42, vie: 42 },
+  { club: 'Lavaur',      penalite: -40, matchs: 132, conduite: 5,  jonglage: 33, regles: 42, vie: 40 },
+  { club: 'Saint Simon', penalite: 0,   matchs: 72,  conduite: 21, jonglage: 5,  regles: 46, vie: 42 },
+];
+
+var categories = [
+  { key: 'matchs',   label: 'Matchs',              color: '#378ADD' },
+  { key: 'conduite', label: 'Conduite',             color: '#1D9E75' },
+  { key: 'jonglage', label: 'Jonglage',             color: '#76CC99' },
+  { key: 'regles',   label: 'R\u00e8gles',          color: '#E07B20' },
+  { key: 'vie',      label: 'Vie',                  color: '#F5B84C' },
+];
+
+var HIGHLIGHT = 'Escalquens';
+var PENALTY_CLUB = 'Lavaur';
+var activeCategories = new Set(categories.map(function(c) { return c.key; }));
+var currentLabels = [];
+var currentSorted = [];
+
+function getVal(d, key) {
+  var v = d[key];
+  return (v === undefined || v === null) ? 0 : v;
+}
+
+function computeTotal(d) {
+  var t = d.penalite || 0;
+  categories.forEach(function(c) {
+    if (activeCategories.has(c.key)) t += getVal(d, c.key);
+  });
+  return t;
+}
+
+function computeSorted() {
+  return allData.slice().sort(function(a, b) {
+    return computeTotal(b) - computeTotal(a);
+  });
+}
+
+function clubLabel(d) {
+  var name = d.club;
+  if (d.club === PENALTY_CLUB) name += ' *';
+  if (d.club === HIGHLIGHT) name += ' \u2605';
+  return name;
+}
+
+function buildLabels(sorted) {
+  return sorted.map(clubLabel);
+}
+
+function ordinal(n) {
+  return n === 1 ? '1er' : n + 'e';
+}
+
+function buildDatasets(sorted) {
+  var activeCats = categories.filter(function(c) { return activeCategories.has(c.key); });
+  return activeCats.map(function(cat, catIndex) {
+    var isLastCat = catIndex === activeCats.length - 1;
+    return {
+      label: cat.label,
+      data: sorted.map(function(d) {
+        var v = getVal(d, cat.key);
+        if (isLastCat && d.club === PENALTY_CLUB && d.penalite < 0) {
+          v = Math.max(0, v + d.penalite);
+        }
+        return v;
+      }),
+      backgroundColor: sorted.map(function(d) {
+        return d.club === HIGHLIGHT ? cat.color : cat.color + 'AA';
+      }),
+      borderWidth: sorted.map(function(d) { return d.club === HIGHLIGHT ? 2 : 0; }),
+      borderColor: sorted.map(function(d) { return d.club === HIGHLIGHT ? '#fff' : 'transparent'; }),
+      stack: 'main',
+    };
+  });
+}
+
+// Render ranks using actual pixel positions from Chart.js scale
+function renderRanks() {
+  var overlay = document.getElementById('rankOverlay');
+  overlay.innerHTML = '';
+  var scale = chart.scales.y;
+  currentSorted.forEach(function(d, i) {
+    var center = scale.getPixelForTick(i);
+    var height = scale.height / currentSorted.length;
+    var el = document.createElement('div');
+    el.className = 'rank-item'
+      + (i < 3 ? ' top3' : '')
+      + (d.club === HIGHLIGHT ? ' highlight-rank' : '');
+    el.style.top = (center - height / 2) + 'px';
+    el.style.height = height + 'px';
+    el.textContent = ordinal(i + 1);
+    overlay.appendChild(el);
+  });
+}
+
+var chartHeight = allData.length * 44 + 80;
+document.getElementById('chart-wrap').style.height = chartHeight + 'px';
+document.getElementById('mainLayout').style.height = chartHeight + 'px';
+
+currentSorted = computeSorted();
+currentLabels = buildLabels(currentSorted);
+
+var chart = new Chart(document.getElementById('myChart'), {
+  type: 'bar',
+  data: {
+    labels: currentLabels,
+    datasets: buildDatasets(currentSorted),
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: { padding: { right: 12 } },
+    animation: {
+      onComplete: function() { renderRanks(); }
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: function(items) {
+            return items[0].label.replace(' \u2605', '').replace(' *', '');
+          },
+          afterBody: function(items) {
+            var clubName = items[0].label.replace(' \u2605', '').replace(' *', '');
+            var row = null;
+            for (var i = 0; i < allData.length; i++) {
+              if (allData[i].club === clubName) { row = allData[i]; break; }
+            }
+            if (!row) return [];
+            var total = computeTotal(row);
+            var rank = 0;
+            for (var j = 0; j < currentSorted.length; j++) {
+              if (currentSorted[j].club === clubName) { rank = j + 1; break; }
+            }
+            var lines = ['\u2500\u2500\u2500\u2500\u2500\u2500\u2500', 'Total : ' + total, ordinal(rank) + ' au classement'];
+            if (row.penalite < 0) lines.push('(dont p\u00e9nalit\u00e9 ' + row.penalite + ' pts)');
+            return lines;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: { color: '#aaa', font: { size: 11 } },
+      },
+      y: {
+        stacked: true,
+        ticks: {
+          color: function(tickCtx) {
+            var lbl = currentLabels[tickCtx.index] || '';
+            if (lbl.indexOf('\u2605') !== -1) return '#D4537E';
+            
+            return '#555';
+          },
+          font: function(tickCtx) {
+            var lbl = currentLabels[tickCtx.index] || '';
+            var isSpecial = lbl.indexOf('\u2605') !== -1;
+            return { weight: isSpecial ? '600' : '400', size: 12 };
+          },
+          autoSkip: false,
+        },
+        grid: { display: false },
+      }
+    }
+  }
+});
+
+function updateChart() {
+  currentSorted = computeSorted();
+  currentLabels = buildLabels(currentSorted);
+  chart.data.labels = currentLabels;
+  chart.data.datasets = buildDatasets(currentSorted);
+  chart.update();
+  // renderRanks called via animation.onComplete
+}
+
+var legendEl = document.getElementById('legend');
+categories.forEach(function(cat) {
+  var btn = document.createElement('button');
+  btn.className = 'legend-btn';
+  btn.style.borderColor = cat.color;
+  btn.style.color = cat.color;
+  btn.innerHTML = '<span class="dot" style="background:' + cat.color + '"></span>' + cat.label;
+  btn.addEventListener('click', function() {
+    if (activeCategories.has(cat.key)) {
+      if (activeCategories.size === 1) return;
+      activeCategories.delete(cat.key);
+      btn.classList.add('inactive');
+    } else {
+      activeCategories.add(cat.key);
+      btn.classList.remove('inactive');
+    }
+    updateChart();
+  });
+  legendEl.appendChild(btn);
+});
+</script>
+</body>
+</html>
